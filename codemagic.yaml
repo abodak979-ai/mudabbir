@@ -56,26 +56,20 @@ workflows:
     artifacts:
       - build/ios/iphonesimulator/*.app
 
-  # Before enabling: in Codemagic → Teams → Code signing identities, upload an Android
-  # keystore (reference name "mudabbir_keystore") and connect App Store Connect
-  # (integration name "mudabbir_asc"), then register bundle id com.mudabbir.mudabbir.
-  release:
-    name: Release (Play + TestFlight)
+  # iOS → TestFlight. Needs (see README): an App Store Connect API key added in
+  # Codemagic as "mudabbir_asc", and an iOS distribution certificate in
+  # Codemagic → Code signing identities. Profiles are fetched automatically.
+  ios-release:
+    name: iOS release (TestFlight)
     instance_type: mac_mini_m2
     max_build_duration: 90
     integrations:
       app_store_connect: mudabbir_asc
     environment:
       <<: *flutter_env
-      android_signing:
-        - mudabbir_keystore
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.mudabbir.mudabbir
-    triggering:
-      events: [tag]
-      tag_patterns:
-        - pattern: 'v*'
     scripts:
       - *get_deps
       - *test
@@ -83,14 +77,29 @@ workflows:
         script: cd ios && pod install --repo-update
       - name: Xcode signing profiles
         script: xcode-project use-profiles
-      - name: Build AAB
-        script: flutter build appbundle --release --build-number=$PROJECT_BUILD_NUMBER
       - name: Build IPA
         script: flutter build ipa --release --build-number=$PROJECT_BUILD_NUMBER --export-options-plist=/Users/builder/export_options.plist
     artifacts:
-      - build/app/outputs/bundle/release/*.aab
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+
+  # Android → AAB for Google Play. Needs a keystore in Codemagic → Code signing
+  # identities with reference name "mudabbir_keystore".
+  android-release:
+    name: Android release (AAB)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      <<: *flutter_env
+      android_signing:
+        - mudabbir_keystore
+    scripts:
+      - *get_deps
+      - *test
+      - name: Build AAB
+        script: flutter build appbundle --release --build-number=$PROJECT_BUILD_NUMBER
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
