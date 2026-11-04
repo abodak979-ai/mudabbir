@@ -1,0 +1,96 @@
+# Codemagic CI for مُدبِّر — https://docs.codemagic.io/yaml-quick-start/building-a-flutter-app/
+#
+# Workflows:
+#   android-debug  → APK you can install directly (no signing setup needed)
+#   ios-simulator  → unsigned build that proves the iOS app compiles
+#   release        → signed AAB + IPA (needs the signing setup described below)
+
+definitions:
+  env: &flutter_env
+    flutter: stable
+    xcode: latest
+    cocoapods: default
+  scripts:
+    - &get_deps
+      name: Get packages
+      script: flutter pub get
+    - &analyze
+      name: Analyze
+      script: flutter analyze
+    - &test
+      name: Unit tests
+      script: flutter test
+
+workflows:
+  android-debug:
+    name: Android debug APK
+    instance_type: linux_x2
+    max_build_duration: 45
+    environment:
+      <<: *flutter_env
+    triggering:
+      events: [push, pull_request]
+      branch_patterns:
+        - pattern: '*'
+    scripts:
+      - *get_deps
+      - *analyze
+      - *test
+      - name: Build APK
+        script: flutter build apk --debug
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+
+  ios-simulator:
+    name: iOS build check (unsigned)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      <<: *flutter_env
+    scripts:
+      - *get_deps
+      - name: Pods
+        script: cd ios && pod install --repo-update
+      - name: Build for simulator
+        script: flutter build ios --simulator --debug
+    artifacts:
+      - build/ios/iphonesimulator/*.app
+
+  # Before enabling: in Codemagic → Teams → Code signing identities, upload an Android
+  # keystore (reference name "mudabbir_keystore") and connect App Store Connect
+  # (integration name "mudabbir_asc"), then register bundle id com.mudabbir.mudabbir.
+  release:
+    name: Release (Play + TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    integrations:
+      app_store_connect: mudabbir_asc
+    environment:
+      <<: *flutter_env
+      android_signing:
+        - mudabbir_keystore
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.mudabbir.mudabbir
+    triggering:
+      events: [tag]
+      tag_patterns:
+        - pattern: 'v*'
+    scripts:
+      - *get_deps
+      - *test
+      - name: Pods
+        script: cd ios && pod install --repo-update
+      - name: Xcode signing profiles
+        script: xcode-project use-profiles
+      - name: Build AAB
+        script: flutter build appbundle --release --build-number=$PROJECT_BUILD_NUMBER
+      - name: Build IPA
+        script: flutter build ipa --release --build-number=$PROJECT_BUILD_NUMBER --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
