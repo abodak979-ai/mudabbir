@@ -10,3 +10,7 @@ const supabasePublishableKey = String.fromEnvironment(
 );
 
 const appTimezone = 'Asia/Riyadh';
+
+/// Deep link the sign-in email opens. Must also be listed in Supabase →
+/// Authentication → URL Configuration → Redirect URLs.
+const authRedirectUrl = 'com.mudabbir.mudabbir://login-callback';

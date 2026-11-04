@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config.dart';
 import '../state/app_state.dart';
 import 'widgets.dart';
 
@@ -13,7 +14,7 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  bool _phone = true;
+  bool _phone = false;
   bool _codeSent = false;
   bool _busy = false;
   final _id = TextEditingController();
@@ -37,11 +38,18 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_phone) {
         await auth.signInWithOtp(phone: _identifier);
       } else {
-        await auth.signInWithOtp(email: _identifier);
+        // The email link opens the app directly (see android/iOS URL scheme).
+        await auth.signInWithOtp(email: _identifier, emailRedirectTo: authRedirectUrl);
       }
       setState(() => _codeSent = true);
     } on AuthException catch (e) {
-      if (mounted) toast(context, e.message);
+      if (!mounted) return;
+      toast(
+        context,
+        e.code == 'phone_provider_disabled'
+            ? context.t('الدخول برقم الجوال غير متاح حالياً، استخدم البريد', 'Phone sign-in is not available yet, use email')
+            : e.message,
+      );
     } catch (_) {
       if (mounted) toast(context, context.t('تعذر الإرسال، تأكد من الاتصال', 'Could not send, check your connection'));
     } finally {
@@ -120,7 +128,13 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Text(context.t('أرسل رمز التحقق', 'Send code')),
               ),
             ] else ...[
-              Text(context.t('أدخل الرمز المرسل إلى $_identifier', 'Enter the code sent to $_identifier'), textAlign: TextAlign.center),
+              Text(
+                _phone
+                    ? context.t('أدخل الرمز المرسل إلى $_identifier', 'Enter the code sent to $_identifier')
+                    : context.t('افتح الرابط المرسل إلى $_identifier من هذا الجوال، أو اكتب الرمز إن وُجد',
+                        'Open the link sent to $_identifier on this phone, or type the code if there is one'),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: _code,
